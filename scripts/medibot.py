@@ -2,7 +2,6 @@ import os
 import streamlit as st
 from dotenv import load_dotenv
 load_dotenv()
-print(os.getenv("GROQ_API_KEY"))
 
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain.chains import RetrievalQA
@@ -17,8 +16,120 @@ from langchain_groq import ChatGroq
 #from dotenv import load_dotenv, find_dotenv
 #load_dotenv(find_dotenv())
 
+# Configure page
+st.set_page_config(
+    page_title="Healthcare AI - Medical Assistant",
+    page_icon="🏥",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
-DB_FAISS_PATH="vectorstore/db_faiss"
+# Custom CSS styling
+st.markdown("""
+<style>
+    /* Main container styling */
+    .main {
+        padding-top: 2rem;
+    }
+    
+    /* Header styling */
+    .header-container {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        padding: 2rem;
+        border-radius: 10px;
+        color: white;
+        margin-bottom: 2rem;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+    
+    .header-title {
+        font-size: 2.5rem;
+        font-weight: bold;
+        margin: 0;
+    }
+    
+    .header-subtitle {
+        font-size: 1rem;
+        opacity: 0.9;
+        margin-top: 0.5rem;
+    }
+    
+    /* Chat message styling */
+    .user-message {
+        background-color: #e3f2fd;
+        padding: 1rem;
+        border-radius: 8px;
+        margin: 0.5rem 0;
+        border-left: 4px solid #2196f3;
+    }
+    
+    .assistant-message {
+        background-color: #f3e5f5;
+        padding: 1rem;
+        border-radius: 8px;
+        margin: 0.5rem 0;
+        border-left: 4px solid #667eea;
+    }
+    
+    /* Source documents styling */
+    .source-docs {
+        background-color: #f5f5f5;
+        padding: 1rem;
+        border-radius: 8px;
+        margin-top: 0.5rem;
+        border-left: 4px solid #000000;
+        font-size: 0.9rem;
+        color: #000000;
+    }
+    
+    /* Sidebar styling */
+    .sidebar-info {
+        background-color: #f5f5f5;
+        padding: 1.5rem;
+        border-radius: 8px;
+        margin-bottom: 1rem;
+    }
+    
+    .info-title {
+        font-weight: bold;
+        color: #667eea;
+        margin-bottom: 0.5rem;
+    }
+    
+    /* Input area styling */
+    .input-container {
+        margin-top: 1rem;
+    }
+    
+    /* Button styling */
+    .stButton>button {
+        background-color: #667eea;
+        color: white;
+        border: none;
+        border-radius: 8px;
+        padding: 0.5rem 2rem;
+        font-weight: bold;
+        transition: all 0.3s ease;
+    }
+    
+    .stButton>button:hover {
+        background-color: #764ba2;
+        box-shadow: 0 4px 8px rgba(102, 126, 234, 0.4);
+    }
+    
+    /* Metric cards */
+    .metric-card {
+        background-color: white;
+        padding: 1rem;
+        border-radius: 8px;
+        border: 1px solid #e0e0e0;
+        margin: 0.5rem 0;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+
+DB_FAISS_PATH="vector_store/db_faiss"
 @st.cache_resource
 def get_vectorstore():
     embedding_model=HuggingFaceEmbeddings(model_name='sentence-transformers/all-MiniLM-L6-v2')
@@ -42,19 +153,67 @@ def load_llm(huggingface_repo_id, HF_TOKEN):
 
 
 def main():
-    st.title("Ask Chatbot!")
-
+    # Sidebar configuration
+    with st.sidebar:
+        st.markdown("### 🏥 About Healthcare AI")
+        st.info(
+            "Healthcare AI is an advanced AI-powered healthcare assistant that helps answer medical questions "
+            "based on trusted medical knowledge. Always consult with a healthcare professional for medical advice."
+        )
+        
+        st.markdown("### ⚙️ Settings")
+        st.markdown("**Model**: Llama 3.3 70B (Groq)")
+        st.markdown("**Embedding Model**: MiniLM-L6-v2")
+        st.markdown("**Temperature**: 0.0 (Precise)")
+        
+        st.markdown("### 📊 Session Info")
+        if 'messages' in st.session_state:
+            st.metric("Messages", len(st.session_state.messages))
+        
+        st.markdown("---")
+        if st.button("🗑️ Clear Chat History"):
+            st.session_state.messages = []
+            st.rerun()
+    
+    # Main header
+    st.markdown("""
+    <div class="header-container">
+        <h1 class="header-title">🏥 Healthcare AI</h1>
+        <p class="header-subtitle">Advanced Medical Knowledge Assistant</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Initialize session state
     if 'messages' not in st.session_state:
         st.session_state.messages = []
 
-    for message in st.session_state.messages:
-        st.chat_message(message['role']).markdown(message['content'])
+    # Display chat history
+    st.markdown("### 💬 Conversation")
+    chat_container = st.container()
+    
+    with chat_container:
+        for message in st.session_state.messages:
+            if message['role'] == 'user':
+                st.markdown(f"**👤 You**: {message['content']}", unsafe_allow_html=True)
+            else:
+                # Split result and source docs
+                content = message['content']
+                if 'Source Docs:' in content:
+                    result, sources = content.split('Source Docs:', 1)
+                    st.markdown(f"**🤖 Assistant**: {result.strip()}", unsafe_allow_html=True)
+                    st.markdown(f"<div class='source-docs'><b>📎 Source Documents:</b>{sources}</div>", unsafe_allow_html=True)
+                else:
+                    st.markdown(f"**🤖 Assistant**: {content}", unsafe_allow_html=True)
 
-    prompt=st.chat_input("Pass your prompt here")
+    # Input section
+    st.markdown("---")
+    st.markdown("### ❓ Ask a Question")
+    prompt = st.chat_input("Ask me anything about healthcare...", max_chars=500)
 
     if prompt:
-        st.chat_message('user').markdown(prompt)
-        st.session_state.messages.append({'role':'user', 'content': prompt})
+        # Display user message
+        st.markdown(f"**👤 You**: {prompt}", unsafe_allow_html=True)
+        st.session_state.messages.append({'role': 'user', 'content': prompt})
 
         CUSTOM_PROMPT_TEMPLATE = """
                 Use the pieces of information provided in the context to answer user's question.
@@ -67,39 +226,55 @@ def main():
                 Start the answer directly. No small talk please.
                 """
         
-        #HUGGINGFACE_REPO_ID="mistralai/Mistral-7B-Instruct-v0.3" # PAID
-        #HF_TOKEN=os.environ.get("HF_TOKEN")  
+        # Progress indicator
+        with st.spinner("🤔 Thinking..."):
+            try:
+                vectorstore = get_vectorstore()
+                if vectorstore is None:
+                    st.error("❌ Failed to load the vector store. Please check the database.")
+                    return
 
-        #TODO: Create a Groq API key and add it to .env file
-        
-        try: 
-            vectorstore=get_vectorstore()
-            if vectorstore is None:
-                st.error("Failed to load the vector store")
+                qa_chain = RetrievalQA.from_chain_type(
+                    llm=ChatGroq(
+                        model_name="llama-3.3-70b-versatile",
+                        temperature=0.0,
+                        groq_api_key=os.environ["GROQ_API_KEY"],
+                    ),
+                    chain_type="stuff",
+                    retriever=vectorstore.as_retriever(search_kwargs={'k': 3}),
+                    return_source_documents=True,
+                    chain_type_kwargs={'prompt': set_custom_prompt(CUSTOM_PROMPT_TEMPLATE)}
+                )
 
-            qa_chain = RetrievalQA.from_chain_type(
-                llm=ChatGroq(
-                    model_name="llama-3.3-70b-versatile",  # free, fast Groq-hosted model
-                    temperature=0.0,
-                    groq_api_key=os.environ["GROQ_API_KEY"],
-                ),
-                chain_type="stuff",
-                retriever=vectorstore.as_retriever(search_kwargs={'k':3}),
-                return_source_documents=True,
-                chain_type_kwargs={'prompt': set_custom_prompt(CUSTOM_PROMPT_TEMPLATE)}
-            )
+                response = qa_chain.invoke({'query': prompt})
 
-            response=qa_chain.invoke({'query':prompt})
+                result = response["result"]
+                source_documents = response["source_documents"]
+                
+                # Format source documents nicely
+                sources_text = ""
+                for i, doc in enumerate(source_documents, 1):
+                    sources_text += f"\n{i}. {doc.page_content[:200]}..."
+                
+                result_to_show = result + "\n**Source Docs:**" + sources_text
+                
+                # Display assistant response
+                st.markdown(f"**🤖 Assistant**: {result}", unsafe_allow_html=True)
+                st.markdown(f"<div class='source-docs'><b>📎 Sources ({len(source_documents)}):</b>{sources_text}</div>", unsafe_allow_html=True)
+                
+                st.session_state.messages.append({
+                    'role': 'assistant',
+                    'content': result + "\nSource Docs:" + sources_text
+                })
+                
+                st.success("✅ Response generated successfully!")
+                
+            except KeyError:
+                st.error("❌ GROQ_API_KEY not found. Please add it to your .env file.")
+            except Exception as e:
+                st.error(f"❌ An error occurred: {str(e)}")
+                st.info("💡 Tip: Make sure the vector store is properly initialized.")
 
-            result=response["result"]
-            source_documents=response["source_documents"]
-            result_to_show=result+"\nSource Docs:\n"+str(source_documents)
-            #response="Hi, I am MediBot!"
-            st.chat_message('assistant').markdown(result_to_show)
-            st.session_state.messages.append({'role':'assistant', 'content': result_to_show})
-
-        except Exception as e:
-            st.error(f"Error: {str(e)}")
 
 if __name__ == "__main__":
     main()
